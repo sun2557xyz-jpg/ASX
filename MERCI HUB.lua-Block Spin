@@ -1,0 +1,267 @@
+-- Load Maclib UI Library
+local Maclib = loadstring(game:HttpGet("https://raw.githubusercontent.com/bloodline-script/Maclib/main/library.lua"))()
+
+local Window = Maclib:CreateWindow({
+    Name = "Main Hub",
+    LoadingTitle = "Loading Script...",
+    LoadingSubtitle = "by Assistant",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "MaclibConfig",
+        FileName = "Config"
+    }
+})
+
+-- Services & Variables
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Config Values
+local Config = {
+    WalkSpeed = 16,
+    InfiniteJump = false,
+    ESP = false,
+    Aimbot = false,
+    AimbotFOV = 350,
+    AntiBullet = false,
+    AntiBan = false,
+    Magnet = false,
+    Underground = false,
+    UndergroundDepth = 1
+}
+
+-- Target Event
+local LocalEvent = ReplicatedStorage:WaitForChild("SpawnGalaxyBlock")
+
+------------------------------------------------------------------
+-- TABS
+------------------------------------------------------------------
+local MainTab = Window:CreateTab("Main Features")
+local PlayerTab = Window:CreateTab("Player Settings")
+local CombatTab = Window:CreateTab("Combat & Visuals")
+
+------------------------------------------------------------------
+-- 1. ปรับความเร็ววิ่ง (1-10 Multiplier)
+------------------------------------------------------------------
+PlayerTab:CreateSlider({
+    Name = "1. WalkSpeed (วิ่งไว 1-10)",
+    Range = {1, 10},
+    Increment = 1,
+    CurrentValue = 1,
+    Callback = function(Value)
+        Config.WalkSpeed = Value
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = 16 * Value
+        end
+    end,
+})
+
+------------------------------------------------------------------
+-- 2. กระโดดไม่จำกัด (Infinite Jump)
+------------------------------------------------------------------
+PlayerTab:CreateToggle({
+    Name = "2. Infinite Jump (กระโดดไม่จำกัด)",
+    CurrentValue = false,
+    Callback = function(Value)
+        Config.InfiniteJump = Value
+    end,
+})
+
+UserInputService.JumpRequest:Connect(function()
+    if Config.InfiniteJump and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
+    end
+end)
+
+------------------------------------------------------------------
+-- 3. ดูคนทั้งแมพ (ESP Name & Highlight)
+------------------------------------------------------------------
+CombatTab:CreateToggle({
+    Name = "3. ESP Player (ดูคนทั้งแมพ)",
+    CurrentValue = false,
+    Callback = function(Value)
+        Config.ESP = Value
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character then
+                if Value then
+                    if not plr.Character:FindFirstChild("ESPHighlight") then
+                        local hl = Instance.new("Highlight")
+                        hl.Name = "ESPHighlight"
+                        hl.FillColor = Color3.fromRGB(255, 0, 0)
+                        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        hl.Parent = plr.Character
+                    end
+                else
+                    if plr.Character:FindFirstChild("ESPHighlight") then
+                        plr.Character.ESPHighlight:Destroy()
+                    end
+                end
+            end
+        end
+    end,
+})
+
+------------------------------------------------------------------
+-- 4 & 5. Aimbot (ล็อคหัว/ศัตรูเท่านั้น) + ปรับ FOV (1-350)
+------------------------------------------------------------------
+CombatTab:CreateToggle({
+    Name = "4. Aimbot Head Only (ล็อคเฉพาะหัวศัตรู)",
+    CurrentValue = false,
+    Callback = function(Value)
+        Config.Aimbot = Value
+    end,
+})
+
+CombatTab:CreateSlider({
+    Name = "5. Aimbot FOV (1-350)",
+    Range = {1, 350},
+    Increment = 1,
+    CurrentValue = 350,
+    Callback = function(Value)
+        Config.AimbotFOV = Value
+    end,
+})
+
+-- Aimbot Logic
+RunService.RenderStepped:Connect(function()
+    if Config.Aimbot then
+        local ClosestPlayer = nil
+        local ShortestDistance = Config.AimbotFOV
+
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") then
+                -- เช็คว่าเป็นศัตรู (กรณีมีระบบทีม)
+                if plr.Team == nil or plr.Team ~= LocalPlayer.Team then
+                    local Pos, OnScreen = Camera:WorldToViewportPoint(plr.Character.Head.Position)
+                    if OnScreen then
+                        local MousePos = UserInputService:GetMouseLocation()
+                        local Dist = (Vector2.new(Pos.X, Pos.Y) - MousePos).Magnitude
+                        if Dist < ShortestDistance then
+                            ShortestDistance = Dist
+                            ClosestPlayer = plr
+                        end
+                    end
+                end
+            end
+        end
+
+        if ClosestPlayer and ClosestPlayer.Character:FindFirstChild("Head") then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, ClosestPlayer.Character.Head.Position)
+        end
+    end
+end)
+
+------------------------------------------------------------------
+-- 6. หลบกระสุน (Dodge/Desync Base)
+------------------------------------------------------------------
+CombatTab:CreateToggle({
+    Name = "6. Dodge Bullets (หลบกระสุน)",
+    CurrentValue = false,
+    Callback = function(Value)
+        Config.AntiBullet = Value
+    end,
+})
+
+RunService.Heartbeat:Connect(function()
+    if Config.AntiBullet and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        local oldVelocity = hrp.Velocity
+        -- สลับ CFrame หลอกตำแหน่งฝั่ง Client
+        hrp.Velocity = Vector3.new(math.random(-50, 50), 0, math.random(-50, 50))
+        RunService.RenderStepped:Wait()
+        hrp.Velocity = oldVelocity
+    end
+end)
+
+------------------------------------------------------------------
+-- 7. กันแบน กันดำ (Basic Client Anti-Ban/Spoof)
+------------------------------------------------------------------
+MainTab:CreateToggle({
+    Name = "7. Anti-Ban / Anti-Blacklist (กันแบน)",
+    CurrentValue = false,
+    Callback = function(Value)
+        Config.AntiBan = Value
+        if Value then
+            -- ป้องกันการดักจับของ Namecall บน Client
+            local gmt = getrawmetatable(game)
+            setreadonly(gmt, false)
+            local oldNamecall = gmt.__namecall
+
+            gmt.__namecall = newcclosure(function(self, ...)
+                local method = getnamecallmethod()
+                if Config.AntiBan and (method == "Kick" or method == "Ban") then
+                    return nil -- ระงับคำสั่ง Kick/Ban
+                end
+                return oldNamecall(self, ...)
+            end)
+        end
+    end,
+})
+
+------------------------------------------------------------------
+-- 8. ดูดของ + ยิง Event (Event:FireServer Auto Run)
+------------------------------------------------------------------
+MainTab:CreateToggle({
+    Name = "8. Item Magnet + Spawn Galaxy Block",
+    CurrentValue = false,
+    Callback = function(Value)
+        Config.Magnet = Value
+    end,
+})
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if Config.Magnet then
+            -- ยิง Event ตามที่ระบุ
+            pcall(function()
+                LocalEvent:FireServer()
+            end)
+
+            -- ดึง Drop Items ใน Workspace เข้าตัว
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = LocalPlayer.Character.HumanoidRootPart
+                for _, obj in pairs(workspace:GetChildren()) do
+                    if obj:IsA("Tool") or obj:IsA("Model") and obj:FindFirstChild("Handle") then
+                        local part = obj:FindFirstChild("Handle") or obj:FindFirstChildOfClass("BasePart")
+                        if part then
+                            part.CFrame = hrp.CFrame
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+------------------------------------------------------------------
+-- 9. ดำดินปรับได้ (1 - 50 เมตร)
+------------------------------------------------------------------
+PlayerTab:CreateToggle({
+    Name = "9. Underground (ดำดิน)",
+    CurrentValue = false,
+    Callback = function(Value)
+        Config.Underground = Value
+    end,
+})
+
+PlayerTab:CreateSlider({
+    Name = "Underground Depth (ความลึก 1-50m)",
+    Range = {1, 50},
+    Increment = 1,
+    CurrentValue = 1,
+    Callback = function(Value)
+        Config.UndergroundDepth = Value
+    end,
+})
+
+RunService.Stepped:Connect(function()
+    if Config.Underground and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        -- เลื่อนตำแหน่งลงใต้ดินตามระยะที่กำหนด
+        hrp.CFrame = hrp.CFrame - Vector3.new(0, Config.UndergroundDepth / 10, 0)
+    end
+end)
